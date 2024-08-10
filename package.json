@@ -1,0 +1,15 @@
+{
+  "name": "puppet",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "puppeteer": "^22.15.0",
+    "puppeteer-core": "^22.15.0"
+  }
+}
