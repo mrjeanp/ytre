@@ -43,15 +43,18 @@ const page = pages[0]
  */
 const ws = values.ws ? new WebSocket(values.ws) : null
 
+let previousSignal = ""
+let signal = "";
 /**
- * @type {string|object}
+ * @type {[string,any]}
  */
-let lastSignal = "";
+let consoleSignalArgs = ["", undefined]
 
 let totalBytes = 0
 
-let totalTime = ""
-let currentTime = ""
+let duration = 0
+
+let currentTime = 0
 
 // websocket server
 const server = Bun.serve({
@@ -65,11 +68,11 @@ const server = Bun.serve({
 
   websocket: {
     open: (_) => {
-      console.log("Client connected");
+      console.log("Client opened");
     },
     close: (_) => {
-      console.log("Client disconnected", _.readyState, _.remoteAddress);
-      // theEnd()
+      console.log("Client closed");
+      theEnd()
     },
     async message(_, data) {
       try {
@@ -95,6 +98,47 @@ const server = Bun.serve({
 await page.setCacheEnabled(false)
 await page.setRequestInterception(true);
 
+await page.exposeFunction('SIGNAL',
+  /**  
+   * @param {string} sig
+   * @param {object} data
+   */
+  async (sig, data) => {
+    if (!sig) return signal;
+
+    consoleSignalArgs = [
+      "SIGNAL", sig,
+      ...(data ? ["DATA", data] : [])
+    ]
+
+    previousSignal = signal;
+    signal = sig
+
+    switch (sig) {
+      case "set_duration":
+        duration = data
+        updateConsole()
+        break;
+      case "set_time":
+        currentTime = data
+        updateConsole()
+        break;
+      case "skip_ad":
+        updateConsole("A wild AD has appeared! Clicking skip...")
+        skipAds()
+        break;
+      case "end":
+        updateConsole("The End.");
+        theEnd()
+        break;
+
+      default:
+        updateConsole(...consoleSignalArgs);
+        break;
+
+    }
+  })
+
 
 page.on('request', req => {
   if (req.isInterceptResolutionHandled()) return;
@@ -114,61 +158,27 @@ page.on('request', req => {
 });
 
 
-await page.exposeFunction('SIGNAL',
-  /**  
-   * @param {string} sig
-   * @param {object} data
-   */
-  async (sig, data) => {
-    console.log("SIGNAL", sig, 'DATA', data)
-    if (!sig) return lastSignal;
-
-    lastSignal = sig
-
-    switch (lastSignal) {
-      case "recording":
-        updateConsole();
-        break;
-      case "ads":
-        console.log("A wild ad has appeared! Clicking skip...")
-        skipAds().catch(console.error)
-        break;
-      case "end": theEnd()
-        break;
-
-
-    }
-  })
-
-
-function updateConsole() {
+function updateConsole(...args) {
   try {
     console.clear();
-    console.log("Chrome:", puppeteer.executablePath())
-    if (lastSignal === "recording") {
-      console.log("Recording...", totalBytes, 'bytes in total.')
-    } else if (lastSignal === 'end') {
-      console.log("Recorded:", totalBytes, 'bytes in total.')
-    }
+    console.log(
+      signal === "end" ? "Recorded" : "Recording...",
+      `${formatTime(currentTime)} / ${formatTime(duration)}`,
+      '--',
+      totalBytes, 'bytes'
+    )
+    args && console.log(...args)
   }
   catch (e) {
     console.error(e)
+    theEnd();
   }
 }
-
-async function theEnd() {
-  updateConsole();
-  server.stop()
-  await writer.end()
-  await page.close()
-  process.exit()
-}
-
 
 /**
  * @param {HTTPResponse} res
  */
-async function runScript(res) {
+async function runInsiderScript(res) {
   const script = fs.readFileSync(path.join(__dirname, './browser/insider.js'), 'utf-8');
 
   // insider script
@@ -176,9 +186,24 @@ async function runScript(res) {
 
 }
 
+async function theEnd() {
+  server.stop()
+  await writer.end()
+  await page.close()
+  process.exit()
+}
+
+
 function skipAds() {
-  const skipButtonSelector = 'button[id*=skip]'
-  return page.locator(skipButtonSelector).setTimeout(10_000).click()
+  const skipButtonSelector = 'button[id*=skip-button]'
+  page.locator(skipButtonSelector).setTimeout(0).click()
+}
+
+function formatTime(seconds = 0) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor(seconds % 3600 / 60);
+  const s = Math.floor(seconds % 3600 % 60);
+  return `${h}:${m}:${s}`
 }
 
 function clickBigPlay() {
@@ -186,4 +211,4 @@ function clickBigPlay() {
   page.locator(ytPlayButtonSelector).click()
 }
 
-page.goto(url, { waitUntil: "load", }).then(runScript).catch(console.error);
+page.goto(url, { waitUntil: "load", }).then(runInsiderScript).catch(console.error);

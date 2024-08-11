@@ -50,10 +50,13 @@ recorder.onstop = () => {
   SIGNAL("end")
 };
 
-recorder.onstart = recorder.onresume = () => {
+recorder.onresume = () => {
+  console.log('Recorging resumed')
+}
+
+recorder.onstart = () => {
   timer.start()
   console.log("Recording");
-  SIGNAL("recording")
 };
 
 recorder.onpause = () => {
@@ -61,7 +64,7 @@ recorder.onpause = () => {
   recorder.requestData()
   recorder.ondataavailable = null
   console.log('Recording paused');
-  SIGNAL("end")
+  SIGNAL("pause")
 };
 
 
@@ -69,23 +72,31 @@ video.addEventListener("playing", videoPlayingHandler);
 video.addEventListener("play", videoPlayHandler);
 video.addEventListener("pause", videoPauseHandler);
 video.addEventListener("ended", videoEndedHandler);
+video.addEventListener("timeupdate", videoTimeUpdateHandler)
 
+// video.addEventListener("canplay", (ev) => {
+//   SIGNAL("duration", ev.target.duration)
+// })
+function videoTimeUpdateHandler(_event) {
+  SIGNAL("set_time", video.currentTime);
+
+}
 function videoPlayingHandler() {
-  recorder.state === "inactive" && !showingAds() && recorder.start();
-  recorder.state === "paused" && !showingAds() && recorder.resume();
   if (showingAds()) {
-    SIGNAL("ads")
+    SIGNAL("skip_ad")
+    return;
   }
+  SIGNAL("set_duration", video.duration)
+  recorder.state === "inactive" && recorder.start();
+  recorder.state === "paused" && recorder.resume();
   console.log('Video playing');
   printStats()
 };
 
 function videoPlayHandler() {
+  if (showingAds()) return;
   recorder.state === "inactive" && !showingAds() && recorder.start();
   recorder.state === "paused" && !showingAds() && recorder.resume();
-  if (showingAds()) {
-    SIGNAL("ads")
-  }
   console.log('Video played');
   printStats()
 };
@@ -102,6 +113,7 @@ function videoEndedHandler() {
   video.removeEventListener("playing", videoPlayingHandler);
   video.removeEventListener("pause", videoPauseHandler);
   video.removeEventListener("ended", videoEndedHandler);
+  video.removeEventListener("timeupdate", videoTimeUpdateHandler)
 
   ws.close()
 
