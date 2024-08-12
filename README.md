@@ -2,7 +2,7 @@
 
 A CLI YouTube audio recorder.
 
-
+----
 
 To install dependencies:
 
