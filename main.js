@@ -1,5 +1,6 @@
-import puppeteer, { HTTPResponse } from "puppeteer";
+import puppeteer from "puppeteer";
 import { parseArgs } from "util";
+import { formatTime } from "./util/formatTime";
 
 const { values, positionals } = parseArgs({
   args: Bun.argv,
@@ -8,6 +9,7 @@ const { values, positionals } = parseArgs({
       type: 'string',
       short: 'w'
     },
+
   },
   strict: true,
   allowPositionals: true,
@@ -15,16 +17,17 @@ const { values, positionals } = parseArgs({
 
 const fs = require("node:fs")
 const path = require("path")
-const assert = require("node:assert/strict")
+const assert = require("node:assert")
 
-const vid = positionals[2]; assert.ok(vid, "Video ID must not be falsy");
-const filename = positionals[3] ?? vid + ".webm"
-const url = `https://youtube.com/watch?v=${vid}`
+const urlReg = /^http[s]?:\/\/.+\.\w+\/?.*/
+const url = positionals[2]; assert.ok(urlReg.test(url), "First CLI Argument (URL) must be valid");
+const filename = positionals[3] ?? 'audio.webm'
 
 const file = Bun.file(filename)
 const writer = file.writer()
 
 
+console.log("launching...")
 // Launch the browser 
 const browser = await puppeteer.launch({
   headless: false,
@@ -43,7 +46,6 @@ const page = pages[0]
  */
 const ws = values.ws ? new WebSocket(values.ws) : null
 
-let previousSignal = ""
 let signal = "";
 /**
  * @type {[string,any]}
@@ -55,6 +57,7 @@ let totalBytes = 0
 let duration = 0
 
 let currentTime = 0
+
 
 // websocket server
 const server = Bun.serve({
@@ -68,11 +71,11 @@ const server = Bun.serve({
 
   websocket: {
     open: (_) => {
-      console.log("Client opened");
+      updateConsole("Insider websocket opened")
     },
     close: (_) => {
-      console.log("Client closed");
-      theEnd()
+      updateConsole("Insider websocket was closed")
+      end()
     },
     async message(_, data) {
       try {
@@ -95,6 +98,14 @@ const server = Bun.serve({
 });
 
 
+
+
+
+/**
+ * Prepare the page before loading. Setup SIGNAL, inject insider helpers, 
+ * and filter non relevant requests.
+ */
+
 await page.setCacheEnabled(false)
 await page.setRequestInterception(true);
 
@@ -104,40 +115,45 @@ await page.exposeFunction('SIGNAL',
    * @param {object} data
    */
   async (sig, data) => {
-    if (!sig) return signal;
+    try {
 
-    consoleSignalArgs = [
-      "SIGNAL", sig,
-      ...(data ? ["DATA", data] : [])
-    ]
+      if (!sig) return signal;
 
-    previousSignal = signal;
-    signal = sig
+      consoleSignalArgs = [
+        "SIGNAL", sig,
+        ...(data ? ["DATA", data] : [])
+      ]
 
-    switch (sig) {
-      case "set_duration":
-        duration = data
-        updateConsole()
-        break;
-      case "set_time":
-        currentTime = data
-        updateConsole()
-        break;
-      case "skip_ad":
-        updateConsole("A wild AD has appeared! Clicking skip...")
-        skipAds()
-        break;
-      case "end":
-        updateConsole("The End.");
-        theEnd()
-        break;
+      signal = sig
 
-      default:
-        updateConsole(...consoleSignalArgs);
-        break;
-
+      switch (sig) {
+        case "set_duration":
+          duration = data
+          updateConsole()
+          break;
+        case "set_time":
+          currentTime = data
+          updateConsole()
+          break;
+        case "skip_ad":
+          updateConsole("Showing ad, skipping...")
+          skipAds()
+          break;
+        case "end":
+          updateConsole("The End.");
+          end()
+          break;
+        default:
+          updateConsole(...consoleSignalArgs);
+          break;
+      }
+    }
+    catch (e) {
+      console.error(e)
+      end()
     }
   })
+
 
 
 page.on('request', req => {
@@ -157,58 +173,53 @@ page.on('request', req => {
   }
 });
 
+// run the page
+page.goto(url, {
+  waitUntil: "networkidle0"
+}).then(installInsiderScript).catch((e) => {
+  console.log("Error",e.message)
+  end()
+})
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Functions
+/////////////
 
 function updateConsole(...args) {
-  try {
-    console.clear();
-    console.log(
-      signal === "end" ? "Recorded" : "Recording...",
-      `${formatTime(currentTime)} / ${formatTime(duration)}`,
-      '--',
-      totalBytes, 'bytes'
-    )
-    args && console.log(...args)
-  }
-  catch (e) {
-    console.error(e)
-    theEnd();
-  }
+  console.clear();
+  console.log("URL", url)
+  console.log(
+    signal === "end" ? "Recorded" :
+      signal === 'pause' ? `Paused` :
+        `Recording...`,
+    `${formatTime(currentTime)} / ${formatTime(duration)}`,
+    '--',
+    totalBytes, 'bytes'
+  )
+  args && console.log(...args)
 }
 
-/**
- * @param {HTTPResponse} res
- */
-async function runInsiderScript(res) {
+
+async function installInsiderScript() {
   const script = fs.readFileSync(path.join(__dirname, './browser/insider.js'), 'utf-8');
 
-  // insider script
   await page.evaluate(script)
 
 }
 
-async function theEnd() {
+async function end() {
   server.stop()
   await writer.end()
   await page.close()
   process.exit()
 }
 
-
 function skipAds() {
   const skipButtonSelector = 'button[id*=skip-button]'
   page.locator(skipButtonSelector).setTimeout(0).click()
 }
 
-function formatTime(seconds = 0) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor(seconds % 3600 / 60);
-  const s = Math.floor(seconds % 3600 % 60);
-  return `${h}:${m}:${s}`
-}
-
-function clickBigPlay() {
-  const ytPlayButtonSelector = 'button[title=Play][aria-label=Play]'
-  page.locator(ytPlayButtonSelector).click()
-}
-
-page.goto(url, { waitUntil: "load", }).then(runInsiderScript).catch(console.error);
+// function clickBigPlay() {
+//   const ytPlayButtonSelector = 'button[title=Play][aria-label=Play]'
+//   page.locator(ytPlayButtonSelector).click()
+// }
