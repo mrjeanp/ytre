@@ -53,7 +53,7 @@ const page = pages[0]
 /**
  * @type {WebSocket|null}
  */
-const ws = values.wss ? new WebSocket(values.wss) : null
+const wss = values.wss ? new WebSocket(values.wss) : null
 
 let signal = "";
 /**
@@ -93,9 +93,9 @@ const server = Bun.serve({
         writer.write(data)
         writer.flush()
 
-        if (ws) {
-          // forward to provived websocket
-          ws.send(data)
+        if (wss) {
+          // forward to custom websocket
+          wss.send(data)
         }
 
         totalBytes += data.length
@@ -202,15 +202,16 @@ function updateConsole(...args) {
   console.log("📺", url)
   console.log(
     signal === "end" ? "✅ Recorded."
-      : signal === 'pause' ? `⏸️ Paused`
+      : signal === 'pause' ? `⏸️  Paused`
         : recording ? `🔴 Recording` : "",
     "--",
     `${formatTime(currentTime)} / ${formatTime(duration)}`,
-    "--",
-    totalBytes, 'bytes'
-
+    "--", totalBytes, 'bytes',
+    // display websocket transmission
+    ...(wss ? [
+      "--", "📡", "Transmitting =>", wss.url
+    ] : [])
   )
-  values.debug && console.log(...signalConsoleArgs)
   args && console.log(...args)
 }
 
