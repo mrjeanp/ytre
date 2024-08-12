@@ -7,8 +7,14 @@ const { values, positionals } = parseArgs({
   options: {
     ws: {
       type: 'string',
-      short: 'w'
+      short: 'w',
     },
+
+    debug: {
+      type: 'boolean',
+      short: 'd',
+      default: false
+    }
 
   },
   strict: true,
@@ -30,10 +36,12 @@ const writer = file.writer()
 console.log("launching...")
 // Launch the browser 
 const browser = await puppeteer.launch({
-  headless: false,
-  devtools: true,
+  headless: values.debug ? false : true,
+  devtools: values.debug,
   args: [
-    "--start-maximized"
+    ...(values.debug ? [
+      "--start-maximized"
+    ] : [])
   ],
 
 });
@@ -50,13 +58,15 @@ let signal = "";
 /**
  * @type {[string,any]}
  */
-let consoleSignalArgs = ["", undefined]
+let signalConsoleArgs = ["", undefined]
 
 let totalBytes = 0
 
 let duration = 0
 
 let currentTime = 0
+
+let recording = false
 
 
 // websocket server
@@ -83,6 +93,7 @@ const server = Bun.serve({
         writer.flush()
 
         if (ws) {
+          // forward to provived websocket
           ws.send(data)
         }
 
@@ -119,7 +130,7 @@ await page.exposeFunction('SIGNAL',
 
       if (!sig) return signal;
 
-      consoleSignalArgs = [
+      signalConsoleArgs = [
         "SIGNAL", sig,
         ...(data ? ["DATA", data] : [])
       ]
@@ -127,29 +138,29 @@ await page.exposeFunction('SIGNAL',
       signal = sig
 
       switch (sig) {
+        case "recording":
+          recording = true
+          break;
         case "set_duration":
           duration = data
-          updateConsole()
           break;
         case "set_time":
           currentTime = data
-          updateConsole()
           break;
         case "skip_ad":
-          updateConsole("Showing ad, skipping...")
           skipAds()
           break;
         case "end":
-          updateConsole("The End.");
+          updateConsole("Finished.");
           end()
           break;
         default:
-          updateConsole(...consoleSignalArgs);
           break;
       }
+      updateConsole();
     }
     catch (e) {
-      console.error(e)
+      updateConsole("ERROR", e.message ?? e)
       end()
     }
   })
@@ -177,7 +188,7 @@ page.on('request', req => {
 page.goto(url, {
   waitUntil: "networkidle0"
 }).then(installInsiderScript).catch((e) => {
-  console.log("Error",e.message)
+  console.log("Error", e.message)
   end()
 })
 
@@ -187,24 +198,23 @@ page.goto(url, {
 
 function updateConsole(...args) {
   console.clear();
-  console.log("URL", url)
+  console.log(url)
   console.log(
-    signal === "end" ? "Recorded" :
-      signal === 'pause' ? `Paused` :
-        `Recording...`,
+    signal === "end" ? "Recorded."
+      : signal === 'pause' ? `Paused.`
+        : recording ? `Recording...` : "",
     `${formatTime(currentTime)} / ${formatTime(duration)}`,
     '--',
     totalBytes, 'bytes'
   )
+  values.debug && console.log(...signalConsoleArgs)
   args && console.log(...args)
 }
 
 
 async function installInsiderScript() {
   const script = fs.readFileSync(path.join(__dirname, './browser/insider.js'), 'utf-8');
-
   await page.evaluate(script)
-
 }
 
 async function end() {
