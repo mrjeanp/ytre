@@ -154,9 +154,9 @@ function videoEndedHandler() {
 
 function showDebugInfo() {
   const debug = {
-    Ads: showingAds(),
-    Recorder: recorder.state,
-    Video: {
+    ads: showingAds(),
+    recorder: recorder.state,
+    video: {
       paused: video.paused,
       ended: video.ended,
     },
