@@ -13,7 +13,7 @@ bun install
 To run:
 
 ```bash
-bun run main.js
+bun run main.js 'youtube-video-url'
 ```
 
 This project was created using `bun init` in bun v1.1.21. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
