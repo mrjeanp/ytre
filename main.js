@@ -5,7 +5,8 @@ import { formatTime } from "./util/formatTime";
 const { values, positionals } = parseArgs({
   args: Bun.argv,
   options: {
-    ws: {
+    // WebSocket Server URL
+    wss: {
       type: 'string',
       short: 'w',
     },
@@ -52,7 +53,7 @@ const page = pages[0]
 /**
  * @type {WebSocket|null}
  */
-const ws = values.ws ? new WebSocket(values.ws) : null
+const ws = values.wss ? new WebSocket(values.wss) : null
 
 let signal = "";
 /**
@@ -188,7 +189,7 @@ page.on('request', req => {
 page.goto(url, {
   waitUntil: "networkidle0"
 }).then(installInsiderScript).catch((e) => {
-  console.log("Error", e.message)
+  console.log("Error", e)
   end()
 })
 
@@ -198,14 +199,16 @@ page.goto(url, {
 
 function updateConsole(...args) {
   console.clear();
-  console.log(url)
+  console.log("📺", url)
   console.log(
-    signal === "end" ? "Recorded."
-      : signal === 'pause' ? `Paused.`
-        : recording ? `Recording...` : "",
+    signal === "end" ? "✅ Recorded."
+      : signal === 'pause' ? `⏸️ Paused`
+        : recording ? `🔴 Recording` : "",
+    "--",
     `${formatTime(currentTime)} / ${formatTime(duration)}`,
-    '--',
+    "--",
     totalBytes, 'bytes'
+
   )
   values.debug && console.log(...signalConsoleArgs)
   args && console.log(...args)
@@ -213,7 +216,7 @@ function updateConsole(...args) {
 
 
 async function installInsiderScript() {
-  const script = fs.readFileSync(path.join(__dirname, './browser/insider.js'), 'utf-8');
+  const script = fs.readFileSync(path.join(__dirname, './insider.js'), 'utf-8');
   await page.evaluate(script)
 }
 
