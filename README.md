@@ -7,19 +7,6 @@ A CLI YouTube audio recorder.
 To install dependencies:
 
 ```bash
-npm i
-```
-
-To run:
-
-```bash
-node main.js
-```
-
-
-### Or if using [ Bun ](https://bun.sh)
-
-```bash
 bun install
 ```
 
