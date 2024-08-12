@@ -142,10 +142,10 @@ await page.exposeFunction('SIGNAL',
         case "recording":
           recording = true
           break;
-        case "set_duration":
+        case "duration":
           duration = data
           break;
-        case "set_time":
+        case "current_time":
           currentTime = data
           break;
         case "skip_ad":

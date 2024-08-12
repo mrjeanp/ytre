@@ -121,7 +121,7 @@ function onRecordStop() {
 
 function videoTimeUpdateHandler(_event) {
   if (showingAds()) return;
-  SIGNAL("set_time", video.currentTime);
+  SIGNAL("current_time", video.currentTime);
 }
 function videoPlayingHandler() {
   // do not remove
@@ -130,7 +130,7 @@ function videoPlayingHandler() {
     SIGNAL("skip_ad")
     return;
   }
-  SIGNAL("set_duration", video.duration)
+  SIGNAL("duration", video.duration)
   recorder.state === "inactive" && recorder.start();
   recorder.state === "paused" && recorder.resume();
 }
